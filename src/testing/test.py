@@ -1,3 +1,6 @@
+from models.bird_mel_db_model import BirdEfficientNetV2S
+from datasets.dataset_soundscapes import BirdSoundscapeDataset 
+from utils.util_functions import UtilFunctions
 import os
 import numpy as np
 import pandas as pd
@@ -7,60 +10,81 @@ import yaml
 from box import Box
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-from sklearn.metrics import roc_auc_score, f1_score, recall_score
-from models.bird_mel_db_model import BirdEfficientNetV2S
-from models.bird_wigner_model import BirdWignerNet
-from datasets.dataset_soundscapes import BirdSoundscapeDataset 
-from utils.util_functions import UtilFunctions
-from datetime import datetime
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
-# Load config yaml
-with open("./config/config.yaml", "r") as f:
-    val = Box(yaml.safe_load(f))
 
 # Load test dataset and test DataLoader
 path = os.path.expanduser("~/1_machine_learning_projects/BIRDS/data/train_soundscapes_labels.csv")
 df = pd.read_csv(path)
 data_test = BirdSoundscapeDataset(df)
-loader_test = DataLoader(data_test, batch_size=val.test.batch_size, shuffle=False)
+loader_test = DataLoader(data_test, batch_size=32, shuffle=False)
 
-# Load model
+# Load model ensemble
+model_names = [
+        "model10_dbmel_gammam0p5_beta0p3_rho2p0_nfft2048_hop512_nmels128_noise0p0_mix0p0_filter0p0_mask0p0_v1.pt",
+        "model10_dbmel_gammam0p5_beta0p5_rho2p0_nfft2048_hop512_nmels128_noise0p0_mix0p0_filter0p0_mask0p0_v1.pt",
+        "model10_dbmel_gammam0p5_beta0p7_rho2p0_nfft2048_hop512_nmels128_noise0p0_mix0p0_filter0p0_mask0p0_v1.pt",
+        "model10_dbmel_gammam0p5_beta1p0_rho2p0_nfft1024_hop320_nmels128_noise0p0_mix0p0_filter0p0_mask0p0_v1.pt",
+        "model10_dbmel_gammam0p5_beta1p0_rho2p0_nfft2048_hop512_nmels128_noise0p0_mix0p0_filter0p0_mask0p0_v1.pt",
+        "model10_dbmel_gammam0p5_beta1p0_rho2p0_nfft2048_hop512_nmels256_noise0p0_mix0p0_filter0p0_mask0p0_v1.pt"]
+
 dir_models = "./output/"
-model_name = (val.test.model_name).replace(".pt","")
-model_name_vector = (model_name).split("_")
-if "dbmel" in model_name_vector:
+models = []
+for model in model_names:
+    model_name = (model).replace(".pt","")
+    model_name_vector = (model_name).split("_")
     n_fft = int(model_name_vector[5].replace("nfft", ""))
     hop_length = int(model_name_vector[6].replace("hop", ""))
     n_mels = int(model_name_vector[7].replace("nmels", ""))
     model = BirdEfficientNetV2S(pretrained=False, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels).to(device)
-elif "wigner" in model_name_vector:
-    n_fft = int(model_name_vector[5].replace("nfft", ""))
-    hop_length = int(model_name_vector[6].replace("hop", ""))
-    model = BirdWignerNet(pretrained=False, n_fft=n_fft, hop_length=hop_length).to(device)
+    models.append(model)
+model_1 = models[0]
+model_2 = models[1]
+model_3 = models[2]
+model_4 = models[3]
+model_5 = models[4]
+model_6 = models[5]
 
-# Load checkpoint
-checkpoint = torch.load(dir_models + val.test.model_name, map_location=device)
+# Load and asign checkpoint
+checkpoint_1 = torch.load(dir_models + model_names[0], map_location=device)
+checkpoint_2 = torch.load(dir_models + model_names[1], map_location=device)
+checkpoint_3 = torch.load(dir_models + model_names[2], map_location=device)
+checkpoint_4 = torch.load(dir_models + model_names[3], map_location=device)
+checkpoint_5 = torch.load(dir_models + model_names[4], map_location=device)
+checkpoint_6 = torch.load(dir_models + model_names[5], map_location=device)
 
-# Load model weights only
-model.load_state_dict(checkpoint["model_state_dict"])
-#model.load_state_dict(torch.load(dir_models + val.test.model_name, map_location=device))
+model_1.load_state_dict(checkpoint_1["model_state_dict"])
+model_2.load_state_dict(checkpoint_2["model_state_dict"])
+model_3.load_state_dict(checkpoint_3["model_state_dict"])
+model_4.load_state_dict(checkpoint_4["model_state_dict"])
+model_5.load_state_dict(checkpoint_5["model_state_dict"])
+model_6.load_state_dict(checkpoint_6["model_state_dict"])
 
 # Test
+print("Testing...")
 all_preds = []
 all_targets = []
 all_data = []
-model.eval()
+model_1.eval()
+model_2.eval()
+model_3.eval()
+model_4.eval()
+model_5.eval()
+model_6.eval()
 with torch.no_grad():
     pbar = tqdm(loader_test)
     for batch_X, batch_y, batch_data in pbar:
         # Move tensors to GPU/CPU
         batch_X = batch_X.to(device)
-        # Forward pass
-        y_pred = model(batch_X)
-        # Convert logits -> probabilities
-        y_pred = torch.sigmoid(y_pred)
+        # Forward pass, Convert logits -> probabilities
+        y_pred_1 = torch.sigmoid(model_1(batch_X))
+        y_pred_2 = torch.sigmoid(model_2(batch_X))
+        y_pred_3 = torch.sigmoid(model_3(batch_X))
+        y_pred_4 = torch.sigmoid(model_4(batch_X))
+        y_pred_5 = torch.sigmoid(model_5(batch_X))
+        y_pred_6 = torch.sigmoid(model_6(batch_X))
+
+        y_pred = (y_pred_1 + y_pred_2 + y_pred_3 + y_pred_4 + y_pred_5 + y_pred_6) / 6
         # Store predictions and targets
         all_preds.append(y_pred.cpu())
         all_targets.append(batch_y.cpu())
@@ -88,20 +112,33 @@ targets = np.hstack((ids, start, end, all_targets))
 targets = pd.DataFrame(targets)
 targets.columns = labels
 
-# Calculate and print Macro ROC-AUC
-util = UtilFunctions()
-aucs = []
-for label in labels[3:]:
-    y_true = targets.loc[: ,label]
-    y_pred = predictions.loc[:,label]
-    auc = util.one_class_auc(y_true, y_pred)
-    aucs.append(auc)
-aucs = np.array(aucs)
-print(f"Macro ROC-AUC: {np.nanmean(aucs):.3f}")
+# Pass the probabilities to mean and topn methods to improve predictions
+n = 1
+pred_topn_method = predictions.copy()
+pred_mean_method = predictions.copy()
+for audio in predictions["row_id"].unique():
+    # Load predictions per audio
+    predictions_per_audio = predictions[predictions["row_id"] == audio]
+    predictions_per_audio = predictions_per_audio.iloc[:,3:].astype(np.float32)
+    mask = pred_mean_method["row_id"] == audio
 
-# Save score to scores.csv
-df = pd.read_csv("./testing/scores.csv")
-day = datetime.now().strftime("%d-%m")
-new_row = {"model_name": model_name, "MACRO-ROC-AUC": round(np.nanmean(aucs), 3), "day": day }
-df.loc[len(df)] = new_row
-df.to_csv("./testing/scores.csv", index=False)
+    # Apply mean and topn method to predictions
+    preds_mean = predictions_per_audio * predictions_per_audio.mean(axis=0)
+    topn_scores = predictions_per_audio.apply(lambda col: col.nlargest(n).mean(), axis=0)
+    preds_topn = predictions_per_audio * topn_scores
+    
+    pred_mean_method.loc[mask, pred_mean_method.columns[3:]] = preds_mean.values
+    pred_topn_method.loc[mask, pred_topn_method.columns[3:]] = preds_topn.values
+
+# Calculate and print Macro ROC-AUC for different post-processing techniques
+utils = UtilFunctions()
+predictions_dict = {"raw": predictions, "mean": pred_mean_method, "topn": pred_topn_method}
+for name, pred_df in predictions_dict.items():
+    aucs = []
+    for label in labels[3:]:
+        y_true = targets.loc[:, label].astype(np.float32)
+        y_pred = pred_df.loc[:, label].astype(np.float32)
+        auc = utils.one_class_auc(y_true, y_pred)
+        aucs.append(auc)
+    aucs = np.array(aucs)
+    print(f"{name} Macro ROC-AUC: {np.nanmean(aucs):.3f}")

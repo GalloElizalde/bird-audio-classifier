@@ -41,8 +41,8 @@ if val.model.m_type == "dbmel":
     model = BirdEfficientNetV2S(dropout=val.model.dropout, n_fft=val.spectrogram.n_fft, 
         hop_length=val.spectrogram.hop_length, n_mels=val.spectrogram.n_mels, p_mask = val.augment.p_mask).to(device)
 elif val.model.m_type == "wigner":
-    model = BirdWignerNet().to(device)
-    
+    model = BirdWignerNet(dropout=val.model.dropout, n_fft=val.spectrogram.n_fft, hop_length=val.spectrogram.hop_length).to(device)
+
 # Loss + Optimizer 
 criterion = LossCombined(beta = val.loss.beta, rho = val.loss.rho) # If beta=0.3: final_loss = 0.3 * BCE + 0.7 * Focal
 optimizer = torch.optim.AdamW(model.parameters(), lr=val.train.lr, weight_decay=val.train.wd)
@@ -73,8 +73,9 @@ if os.path.exists(checkpoint_path):
 
 # Print config
 print(f"""
-Training configuration
+# Training configuration
 ----------------------
+Model Type:         : {val.model.m_type}
 Total Epochs        : {total_epochs}
 Starting Epoch      : {start_epoch}
 Batch size          : {val.train.batch_size}
@@ -87,7 +88,7 @@ Window size         : {val.spectrogram.n_fft}
 Frame hop / Stride  : {val.spectrogram.hop_length}
 Mel bins            : {val.spectrogram.n_mels}
 
-Augmentation configuration
+# Augmentation configuration
 ----------------------
 Mel-Mask probability: {val.augment.p_mask}
 Noise probability   : {val.augment.p_noise}
@@ -95,7 +96,7 @@ Noise alpha         : {val.augment.alpha}
 MixUp probability   : {val.augment.p_mix}
 Filter probability  : {val.augment.p_filter}
 
-Loss and other Parameters
+# Loss and other Parameters
 ----------------------
 Loss BCE factor        : {val.loss.beta}
 Loss Focal factor      : {1.0 - val.loss.beta}

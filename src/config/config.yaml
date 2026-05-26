@@ -3,7 +3,7 @@ debug:
 
 # Train Hyperparameters
 train:
-    n_epochs: 10  # 30 ok
+    n_epochs: 30  # 30 ok
     lr: 0.0001
     wd: 0.0001
     num_workers: 6  # optimal 6
@@ -62,7 +62,7 @@ spectrogram:
 
 # Combined Loss (BCE + Focal) # final_loss = 0.3 * BCE + 0.7 * Focal
 loss:
-    beta: 0.5 #
+    beta: 1.0 #
     rho: 2.0
 
 

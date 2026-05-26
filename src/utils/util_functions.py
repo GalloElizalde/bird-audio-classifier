@@ -104,6 +104,7 @@ class LossCombined(nn.Module):
         loss = self.beta * bce_loss + ((1-self.beta) * focal_loss)
 
         return loss.mean()
+    
 
 
 
