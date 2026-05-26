@@ -4,7 +4,7 @@ __pycache__/
 
 data/
 output/
-
+final_prediction/
 *.pt
 *.pth
 *.ckpt
