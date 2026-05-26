@@ -1,0 +1,53 @@
+# Train Hyperparameters
+train:
+    n_epochs: 20
+    batch_size: 32
+    lr: 0.0001
+    wd: 0.0001
+    
+# Loader Config
+loader:
+    num_workers: 4
+    pin_memory: True
+    persistent_workers: True
+    prefetch_factor: 2
+
+# Data Augmentation Config
+augment:
+    gamma: -0.5
+    p_noise: 0.50
+    p_mix: 0.55
+    p_filter: 0.25
+    p_soundscape_noise: 0.5
+    alpha: 0.3
+
+# Model Config
+model:
+ dropout: 0.25
+
+# Spectrogram Config
+spec_balanced: #ballanced 
+    n_fft: 2048
+    hop_length: 512
+    n_mels: 128
+    p_mask: 0.3
+spec_rtemp: # better temp. res(aves)
+    n_fft: 2048
+    hop_length: 512
+    n_mels: 256
+    p_mask: 0.3
+spec_rfreq: #better freq. res(short calls)
+    n_fft: 1024
+    hop_length: 320
+    n_mels: 128
+    p_mask: 0.3
+
+
+# Combined Loss (BCE + Focal) # final_loss = 0.3 * BCE + 0.7 * Focal
+loss:
+    beta: 0.3
+    rho: 2.0
+
+# Label Smoothing (Knowledge distillation)
+mu: 0.05
+

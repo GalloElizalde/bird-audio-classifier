@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+data/
+output/
+
+*.pt
+*.pth
+*.ckpt
+*.wav
+*.ogg
+*.flac
+*.csv
+.env
+.DS_Store
