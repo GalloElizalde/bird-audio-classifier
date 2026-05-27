@@ -5,17 +5,17 @@ import timm
 import torchaudio
 
 class BirdEfficientNetV2S(nn.Module):
+    '''
+    EfficientNetV2-S model for bird audio classification using
+    log-mel spectrogram representations.
+    '''
     def __init__(self, num_classes=234, pretrained=True, dropout=0.25, n_fft=2048, hop_length=512, n_mels=256, p_mask = 0.5):
 
         super().__init__()
         self.n_fft = n_fft
         self.hop_length = hop_length
         self.n_mels = n_mels
-        
         self.p_mask = p_mask
-
-        self.global_mean_mel_db = -5.6946048623856464  # with 5s segments audios
-        self.global_std_mel_db = 23.86795486727926     # with 5s segments audios
         
         # CNN backbone
         self.backbone = timm.create_model("tf_efficientnetv2_s.in21k_ft_in1k", 
@@ -55,9 +55,7 @@ class BirdEfficientNetV2S(nn.Module):
 
         # Normalize
         mean = x.mean(dim=2, keepdim=True)
-        std = x.std(dim=2, keepdim=True)  
-        #mean = self.global_mean_mel_db
-        #std = self.global_std_mel_db    
+        std = x.std(dim=2, keepdim=True)    
 
         x = (x - mean) / (std + 1e-6)
 

@@ -15,28 +15,28 @@ from utils.util_functions import LossCombined
 with open("./config/config.yaml", "r") as f:
     val = Box(yaml.safe_load(f))
 
-# Optimization and select device
-torch.backends.cudnn.benchmark = True
-torch.backends.cuda.matmul.allow_tf32 = True
-torch.backends.cudnn.allow_tf32 = True
-torch.set_float32_matmul_precision(val.debug.matmul_precision)  
+# Select device
+#torch.backends.cudnn.benchmark = True
+#torch.backends.cuda.matmul.allow_tf32 = True
+#torch.backends.cudnn.allow_tf32 = True
+#torch.set_float32_matmul_precision()  
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Load dataframe 
+# Load training dataframe and dataset
 path = os.path.expanduser("~/1_machine_learning_projects/BIRDS/BIRDS/src/data/df_with_folds.csv")
 df_train = pd.read_csv(path)
 data_train = BirdAudioDataset(df = df_train, p_noise = val.augment.p_noise, p_filter = val.augment.p_filter, 
                               p_mix = val.augment.p_mix, p_soundscape_noise = val.augment.p_soundscape_noise, alpha = val.augment.alpha)
 
 
-# Create Dataloader using sampler w load weights
+# Create DataLoader using weighted sampling
 sample_weights = torch.tensor(df_train["sample_weight"].values ** val.augment.gamma, dtype=torch.double)
 sampler = WeightedRandomSampler(weights=sample_weights, num_samples=len(sample_weights), replacement=True)
 dataloader = DataLoader(data_train, batch_size=val.train.batch_size, sampler=sampler, 
                         shuffle=False, num_workers=val.train.num_workers, pin_memory=val.train.pin_memory, 
                         persistent_workers=val.train.persistent_workers, prefetch_factor=val.train.prefetch_factor)
 
-# Model
+# Select model architecture
 if val.model.m_type == "dbmel":
     model = BirdEfficientNetV2S(dropout=val.model.dropout, n_fft=val.spectrogram.n_fft, 
         hop_length=val.spectrogram.hop_length, n_mels=val.spectrogram.n_mels, p_mask = val.augment.p_mask).to(device)
@@ -44,11 +44,11 @@ elif val.model.m_type == "wigner":
     model = BirdWignerNet(dropout=val.model.dropout, n_fft=val.spectrogram.n_fft, hop_length=val.spectrogram.hop_length).to(device)
 
 # Loss + Optimizer 
-criterion = LossCombined(beta = val.loss.beta, rho = val.loss.rho) # If beta=0.3: final_loss = 0.3 * BCE + 0.7 * Focal
+criterion = LossCombined(beta = val.loss.beta, rho = val.loss.rho) # final_loss = beta * BCE + (1-beta) * Focal
 optimizer = torch.optim.AdamW(model.parameters(), lr=val.train.lr, weight_decay=val.train.wd)
 
 
-# Check if new training or expand training with checkpoints parameters
+# Check if training starts from scratch or resumes from checkpoint
 start_epoch = 0
 checkpoint_path = f"output/{val.train.resume_training_model}.pt"
 if os.path.exists(checkpoint_path):
@@ -105,7 +105,7 @@ Data Sampling Gamma    : {val.augment.gamma}
 """)
 
 
-# Name model
+# Build model name from training parameters
 mel_name = f"nfft{val.spectrogram.n_fft}_hop{val.spectrogram.hop_length}_nmels{val.spectrogram.n_mels}"
 mel_name = mel_name.replace(".", "p")
 
@@ -124,28 +124,37 @@ else:
 
 # ============================ TRAINING LOOP =============================  
 for epoch in range(start_epoch, total_epochs):
-    # Put model to train 
+
+    # Set model to train mode
     model.train()
     epoch_loss = 0.0
     pbar = tqdm(dataloader, desc=f"Epoch {epoch+1}/{total_epochs}") # Create progress bar
+
     for batch_X, batch_y in pbar:
-        # To cpu
+
+        # Move batch to GPU/CPU
         batch_X = batch_X.to(device, non_blocking=True)
         batch_y = batch_y.float().to(device, non_blocking=True)
+
         # Reinitialize gradients
         optimizer.zero_grad(set_to_none=True)
+
         # Forward
         logits = model(batch_X)
+
         # Loss
         loss = criterion(logits, batch_y)
         epoch_loss += loss.item()
+
         # Backprop
         loss.backward()
         optimizer.step()
+
     # Track loss
     epoch_loss /= len(dataloader)
     train_losses.append(epoch_loss)
     print(f"Epoch {epoch+1} | Loss: {epoch_loss:.4f}")
+
     # Scheduler
     scheduler.step()
   
@@ -156,7 +165,7 @@ torch.save(checkpoint, f"output/{model_name}")
 print(f"Checkpoint saved at output/{model_name}")
 
 
-# Save Loss Plot
+# Save loss plot
 name_plot = model_name.replace(".pt", "")
 plt.plot(train_losses)
 plt.xlabel("Epoch")

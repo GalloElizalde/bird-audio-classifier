@@ -13,15 +13,16 @@ from utils.util_functions import UtilFunctions
 class BirdSoundscapeDataset(Dataset):
     '''
     Inputs:
-    - df_soundscapes ("train_soundscapes_labels.csv" dataframe with filename, start, end, target information)
+        - df_soundscapes: dataframe from "train_soundscapes_labels.csv" with filename, start, end and labels
 
     Outputs:
-    - chunk: Tensor [samples]
-    - target: Tensor [num_classes]
+        - chunk: Tensor [audio samples]
+        - target: Tensor [num_classes]
+        - data: list with filename, start and end
 
     Description:
-    Loads audio chunks from soundscapes using timestamps and returns
-    waveform with multi-hot labels.
+        Loads audio chunks from soundscapes using timestamps and returns
+        waveform, multi-hot target and chunk metadata.
     '''
     def __init__(self, df_soundscapes):
         self.df_soundscapes = df_soundscapes
@@ -61,35 +62,3 @@ class BirdSoundscapeDataset(Dataset):
 
         return chunk, target, data
     
-
-# SANITY CHECK
-if __name__ == "__main__":
-    import random
-
-    # Load dataframe
-    df = pd.read_csv(os.path.expanduser("~/1_machine_learning_projects/BIRDS/data/train_soundscapes_labels.csv"))
-
-    print("Loading Dataset...")
-    dataset = BirdSoundscapeDataset(df)
-
-    # Sample a few random items
-    for _ in range(5):
-        idx = random.randint(0, len(dataset) - 1)
-        waveform, target, data = dataset[idx]
-
-        print(f"\nIndex: {idx}")
-        print(f"Waveform shape: {waveform.shape}, dtype: {waveform.dtype}")
-        print(f"Target shape: {target.shape}, sum: {target.sum()}")
-        print(f"Data {data}")
-
-        # Basic sanity checks
-        assert target.ndim == 1
-        assert torch.all((target == 0) | (target == 1))
-        assert target.sum() >= 1
-
-        # Check consistency with number of classes
-        assert target.shape[0] == dataset.utils.n_classes
-
-        print(f"Active labels idx: {target.nonzero().squeeze()}")
-
-    print("\nSanity check passed.")

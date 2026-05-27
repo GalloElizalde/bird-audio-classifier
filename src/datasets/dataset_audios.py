@@ -14,21 +14,22 @@ from utils.util_functions import UtilFunctions
 class BirdAudioDataset(Dataset):
     '''
     Inputs:
-        - df: transformed dataframe of "train.csv" containing name of file, target and k-Folds index
-        - segment_seconds: final duration of audio in seconds after cutting it
-        - p_noise: prob. of adding noise
-        - p_filter: prob. of adding random equalization to boost or attenuate different frequency bands in the audio.
-        - p_mix: prob. of adding a secondary audio
-        - p_sounscapes_noies: probability of adding a soundscape audio as noise over a ESC-50 audio
-        - alpha: factor of noise [0,1]
+        - df: transformed dataframe from "train.csv" with filenames and labels
+        - segment_seconds: duration of extracted audio chunk in seconds
+        - p_noise: probability of adding background noise
+        - p_filter: probability of applying random equalization filtering
+        - p_mix: probability of applying MixUp with another audio
+        - p_soundscape_noise: probability of selecting noise from soundscapes instead of ESC50
+        - alpha: noise amplitude factor [0,1]
 
     Outputs:
-        - chunk: Tensor [audio sample]
+        - chunk: Tensor [audio samples]
         - target: Tensor [num_classes]
 
     Description:
-    Loads audio, extracts fixed-length segment, applies augmentation,
-    returns waveform and multi-label target.
+    Loads audio waveforms, extracts fixed-length chunks, applies
+    optional augmentations (noise, filtering, MixUp), and returns
+    waveform-target pairs for multi-label classification.
     '''
 
     def __init__(self, df, segment_seconds = 5, p_noise = 0.5, p_filter = 0.25, p_mix = 0.66, p_soundscape_noise = 0.5, alpha = 0.3):
@@ -107,7 +108,7 @@ class BirdAudioDataset(Dataset):
             waveform = waveform + (self.alpha * noise_chunk)
         return waveform
 
-    # Function to Random filtering
+    # Function to apply random filtering
     def random_filter(self, waveform, sample_rate=32000):
         if random.random() > self.p_filter:
             return waveform
@@ -166,34 +167,3 @@ class BirdAudioDataset(Dataset):
 
         return chunk, target
     
-
-
-#   ============================ SANITY CHECK  =============================================
-if __name__ == "__main__":
-    import os
-
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    DATA_PATH = os.path.join(BASE_DIR, "..", "data", "df_with_folds.csv")
-
-    df_train = pd.read_csv(DATA_PATH)
-
-    # Create dataset
-    print("Loading Data")
-    dataset_train = BirdAudioDataset(df_train, segment_seconds = 5, p_noise = 1, p_filter = 0.25, 
-                                     p_mix = 0.66, p_soundscape_noise = 0, alpha = 0.3)
-
-    # Check a few random items
-    for _ in range(10):
-        idx = random.randint(0, len(dataset_train) - 1)
-        x, y = dataset_train[idx]
-
-        print(f"idx={idx}, x shape={x.shape}, y sum={y.sum()}")
-
-        # Basic sanity checks
-        assert x.shape[0] == 5 * 32000
-        assert y.ndim == 1
-        assert torch.all((y == 0) | (y == 1))
-        assert y.sum() >= 1
-
-    print("Sanity check passed.")
-#============================================================================================

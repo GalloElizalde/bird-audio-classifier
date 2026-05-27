@@ -5,6 +5,11 @@ import timm
 from scipy.signal import hilbert
 
 class BirdWignerNet(nn.Module):
+    '''
+    EfficientNetV2-S model for bird audio classification using
+    Wigner distribution representations.
+    
+    '''
     def __init__(self, num_classes=234, pretrained=True, dropout=0.25, n_fft=2048, hop_length=512):
         super().__init__()
 
@@ -92,13 +97,3 @@ class BirdWignerNet(nn.Module):
 
     
 
-
-# Example
-if __name__ == "__main__":
-    waveform = torch.randn(4, 32000 * 5)
-
-    model = BirdWignerNet()
-
-    y = model(waveform)
-
-    print(y)  # [4,234]

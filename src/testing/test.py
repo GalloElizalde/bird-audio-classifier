@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-# Load test dataset and test DataLoader
+# Load test dataset and DataLoader
 path = os.path.expanduser("~/1_machine_learning_projects/BIRDS/data/train_soundscapes_labels.csv")
 df = pd.read_csv(path)
 data_test = BirdSoundscapeDataset(df)
@@ -45,7 +45,7 @@ model_4 = models[3]
 model_5 = models[4]
 model_6 = models[5]
 
-# Load and asign checkpoint
+# Load and assign checkpoints
 checkpoint_1 = torch.load(dir_models + model_names[0], map_location=device)
 checkpoint_2 = torch.load(dir_models + model_names[1], map_location=device)
 checkpoint_3 = torch.load(dir_models + model_names[2], map_location=device)
@@ -76,7 +76,8 @@ with torch.no_grad():
     for batch_X, batch_y, batch_data in pbar:
         # Move tensors to GPU/CPU
         batch_X = batch_X.to(device)
-        # Forward pass, Convert logits -> probabilities
+
+        # Forward pass and convert logits -> probabilities
         y_pred_1 = torch.sigmoid(model_1(batch_X))
         y_pred_2 = torch.sigmoid(model_2(batch_X))
         y_pred_3 = torch.sigmoid(model_3(batch_X))
@@ -85,6 +86,7 @@ with torch.no_grad():
         y_pred_6 = torch.sigmoid(model_6(batch_X))
 
         y_pred = (y_pred_1 + y_pred_2 + y_pred_3 + y_pred_4 + y_pred_5 + y_pred_6) / 6
+
         # Store predictions and targets
         all_preds.append(y_pred.cpu())
         all_targets.append(batch_y.cpu())
@@ -94,7 +96,7 @@ with torch.no_grad():
 all_preds = torch.cat(all_preds).numpy()
 all_targets = torch.cat(all_targets).numpy()
 
-# Combine predictions, id and labels data
+# Combine predictions, metadata and labels
 path_taxonomy = os.path.expanduser("~/1_machine_learning_projects/BIRDS/data/taxonomy.csv") 
 df_taxonomy = pd.read_csv(path_taxonomy)
 labels = df_taxonomy["primary_label"].values
@@ -103,7 +105,7 @@ ids = np.array(all_data)[:,0:1]
 start = np.array(all_data)[:,1:2]
 end = np.array(all_data)[:,2:3]
 
-# Create New dataframes of predictions and targets
+# Create prediction and target dataframes
 predictions = np.hstack((ids, start, end, all_preds))
 predictions = pd.DataFrame(predictions)
 predictions.columns = labels
@@ -112,17 +114,18 @@ targets = np.hstack((ids, start, end, all_targets))
 targets = pd.DataFrame(targets)
 targets.columns = labels
 
-# Pass the probabilities to mean and topn methods to improve predictions
+# Apply mean and top-N postprocessing methods
 n = 1
 pred_topn_method = predictions.copy()
 pred_mean_method = predictions.copy()
 for audio in predictions["row_id"].unique():
-    # Load predictions per audio
+
+    # Load predictions for a single audio
     predictions_per_audio = predictions[predictions["row_id"] == audio]
     predictions_per_audio = predictions_per_audio.iloc[:,3:].astype(np.float32)
     mask = pred_mean_method["row_id"] == audio
 
-    # Apply mean and topn method to predictions
+    # Apply mean and top-N postprocessing
     preds_mean = predictions_per_audio * predictions_per_audio.mean(axis=0)
     topn_scores = predictions_per_audio.apply(lambda col: col.nlargest(n).mean(), axis=0)
     preds_topn = predictions_per_audio * topn_scores
@@ -130,7 +133,7 @@ for audio in predictions["row_id"].unique():
     pred_mean_method.loc[mask, pred_mean_method.columns[3:]] = preds_mean.values
     pred_topn_method.loc[mask, pred_topn_method.columns[3:]] = preds_topn.values
 
-# Calculate and print Macro ROC-AUC for different post-processing techniques
+# Calculate Macro ROC-AUC for different postprocessing methods
 utils = UtilFunctions()
 predictions_dict = {"raw": predictions, "mean": pred_mean_method, "topn": pred_topn_method}
 for name, pred_df in predictions_dict.items():
