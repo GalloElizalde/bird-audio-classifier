@@ -14,15 +14,13 @@ Using data from the BirdCLEF+ 2026 challenge and inspired by the BirdCLEF+ 2025 
 
 The project includes:
 
-- Short-Time Fourier Transform (STFT) representations.
 - Log-mel spectrogram representations.
 - Wigner-Ville time-frequency distributions.
 - Audio-domain augmentation techniques, including masking, waveform mixing, noise injection, and random filtering.
 - Data sampling strategies and combined loss formulations (Focal Loss + Binary Cross Entropy) to mitigate severe class imbalance.
-- Pseudo-labeling and teacher-student distillation.
-- Model validation using 5-fold cross-validation.
 - Model ensembling for more robust inference under noisy environmental conditions.
-- Post-processing techniques, including label smoothing and probability reweighting.
+- Post-processing techniques, including probability reweighting methods.
+- Transfer learning from isolated bird recordings to soundscape classification.
 
 ---
 
@@ -44,6 +42,31 @@ In addition, the Wigner distribution exactly preserves both temporal and spectra
 Its main limitation is the appearance of oscillatory cross-terms in multicomponent signals, which introduce interference artifacts and complicate interpretation. Spectrograms largely avoid this issue due to their inherent smoothing effect.
 
 ---
+## Architecture Overview
+
+Both models share the same EfficientNetV2-S backbone and multilabel
+classification head. The only difference lies in the time-frequency
+representation extracted from the input waveform.
+
+### Log-Mel Baseline
+
+```text
+waveform → log-mel spectrogram → SpecAugment → EfficientNetV2-S
+```
+
+Implementation:
+`models/bird_mel_db_model.py`
+
+---
+
+### Wigner Distribution Variant
+
+```text
+waveform → analytic signal → Wigner distribution → log compression → EfficientNetV2-S
+```
+
+Implementation:
+`models/bird_wigner_model.py`
 
 ## Architecture Overview
 
@@ -123,18 +146,18 @@ Mel bins            : 128
 
 ### Audio Dataset
 
-Training samples are built from:
+Training samples are constructed from isolated bird recordings.
 
-- bird recordings,
-- environmental soundscapes,
-- ESC-50 noise sources.
+Each waveform is converted into a fixed-length audio chunk. If the
+recording is shorter than the target duration, zero-padding is applied;
+otherwise, a random segment is extracted.
 
-Implemented augmentations include:
+The dataset also supports audio-domain augmentation using environmental
+soundscapes, ESC-50 noise sources, random EQ filtering, and MixUp-style
+waveform mixing.
 
-- random noise injection,
-- random EQ filtering,
-- MixUp-style waveform mixing,
-- SpecAugment masking.
+Targets are represented as multi-hot vectors using both primary and
+secondary labels.
 
 Implementation:
 
@@ -152,11 +175,11 @@ MixUp probability   : 0.5
 Filter probability  : 0.2
 ```
 
-- **Mel-Mask probability** controls SpecAugment masking probability.
-- **Noise probability** determines the probability of random noise injection.
-- **Noise alpha** controls injected noise magnitude.
-- **MixUp probability** enables waveform mixing augmentation.
-- **Filter probability** applies random equalization filtering.
+- **Mel-Mask probability** controls SpecAugment masking probability during training.
+- **Noise probability** controls random environmental noise injection.
+- **Noise alpha** controls injected noise amplitude.
+- **MixUp probability** controls waveform mixing augmentation.
+- **Filter probability** controls random equalization filtering.
 
 ---
 
@@ -169,86 +192,110 @@ Focusing factor        : 2.0
 Data Sampling Gamma    : -0.5
 ```
 
-- **Loss BCE factor** controls Binary Cross Entropy contribution.
-- **Loss Focal factor** controls Focal Loss contribution.
-- $$
+- **Loss BCE factor** controls the Binary Cross Entropy contribution.
+- **Loss Focal factor** controls the Focal Loss contribution.
+
+$$
 L = \beta L_{\mathrm{BCE}} + (1 - \beta)L_{\mathrm{Focal}}
 $$
-- **Focusing factor** adjusts the focal penalty on difficult samples.
+
+- **Focusing factor** controls the focal penalty applied to difficult samples.
 - **Data Sampling Gamma** controls weighted sampling behavior for class imbalance mitigation.
 
 ---
 
----
-
-### Evaluation
-
-Evaluation is performed on timestamped soundscape chunks with multilabel targets.
-
-Implementation:
-
-```text
-datasets/dataset_soundscapes.py
-```
-
----
 
 ## Training Strategy
 
-The project includes:
+Training is performed using a `WeightedRandomSampler` to reduce the
+strong class imbalance present in BirdCLEF recordings. Sampling weights
+are computed from class frequencies and controlled through the
+$\gamma$ parameter.
 
-- weighted random sampling,
-- cosine annealing learning-rate scheduling,
-- teacher-student distillation,
-- multi-model ensembling.
+The training script supports two selectable architectures:
 
-Main training entrypoints:
+- `BirdEfficientNetV2S`
+- `BirdWignerNet`
+
+Model selection is controlled directly from `config.yaml`.
+
+Optimization uses:
+
+- AdamW optimizer,
+- cosine annealing learning-rate scheduler,
+- combined BCE + Focal multilabel loss.
+
+Training also supports:
+
+- random environmental noise injection,
+- MixUp waveform augmentation,
+- random EQ filtering,
+- SpecAugment masking,
+- checkpoint resume training,
+- automatic versioned checkpoint saving.
+
+Inference and evaluation are performed using multi-model ensembles with
+different spectrogram configurations (`n_fft`, `hop_length`, `n_mels`)
+followed by probability-based postprocessing methods.
+
+Main entrypoints:
 
 ```text
-train.py
-teach.py
-ensemble_predict.py
+training/train.py
+testing/test.py
 ```
 
 ---
 
 ## Results
 
-Best student model achieved approximately:
+Best ensemble configuration achieved approximately:
 
 $$
 \text{Macro ROC-AUC} \approx 0.80
 $$
 
-with 8-model ensemble as teacher with different parameters of n_fft, n_mels and 
+The final inference pipeline uses an ensemble of multiple
+`BirdEfficientNetV2S` models trained with different spectrogram
+configurations:
+
+- different `n_fft` values,
+- different `hop_length` values,
+- different `n_mels` resolutions,
+- different BCE/Focal balancing parameters.
+
+For each soundscape segment:
+
+1. logits are converted into probabilities using sigmoid activation,
+2. predictions from all ensemble models are averaged,
+3. probabilities are postprocessed using:
+   - mean-based reweighting,
+   - top-N probability reweighting.
+
+Evaluation is performed on timestamped soundscape segments using
+Macro ROC-AUC over all bird classes.
+
 Main observations:
 
 - log-mel representations consistently outperformed Wigner-based representations,
-- Ensemble averaging improved stability,
-- Augmentation improved generalization,
-- Wigner representations increased computational cost without measurable AUC gains in the current setup.
+- ensemble averaging improved prediction stability,
+- probability reweighting improved final ROC-AUC,
+- audio-domain augmentation improved generalization,
+- Wigner representations increased computational cost without measurable ROC-AUC improvements in the current setup.
 
 ---
 
 ## Repository Structure
 
 ```text
-## Repository Structure
-
-```text
 bird-audio-classifier/
-├── notebooks/
-│   ├── audio_exploration.ipynb
-│   └── data_analysis.ipynb
-│
 ├── src/
 │   ├── config/
 │   │   └── config.yaml
 │   │
 │   ├── datasets/
 │   │   ├── dataset_audios.py
-│   │   ├── dataset_soundscapes.py
-│   │   └── dataset_teach.py
+│   │   └── dataset_soundscapes.py
 │   │
 │   ├── models/
 │   │   ├── bird_mel_db_model.py
@@ -260,16 +307,14 @@ bird-audio-classifier/
 │   ├── training/
 │   │   └── train.py
 │   │
-│   ├── teaching/
-│   │   ├── teach.py
-│   │   └── ensemble_predict.py
-│   │
 │   ├── testing/
 │   │   └── test.py
 │   │
 │   └── utils/
 │       ├── dictionary.py
 │       └── util_functions.py
+│
+└── README.md
 ```
 
 ---
@@ -278,15 +323,17 @@ bird-audio-classifier/
 
 Potential future improvements:
 
-- Embedding models,
-- Attention pooling.
+- attention-based pooling strategies,
+- embedding-based bioacoustic representations,
+- self-supervised audio pretraining,
+- improved Wigner cross-term suppression methods,
 
 ---
 
-## Disclaimer
-## Citation
+## References
 
-If you use this repository, please cite:
+The implementation and experimental setup of this project were mainly
+inspired by the following works:
 
 ```bibtex
 @misc{birdclef-2026,
@@ -313,7 +360,11 @@ If you use this repository, please cite:
 ```
 ## License
 
-This project is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0).
+This project is licensed under the
+Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
+License (CC BY-NC-SA 4.0).
+
+For more information, see:
 
 https://creativecommons.org/licenses/by-nc-sa/4.0/
 
