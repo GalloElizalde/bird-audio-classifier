@@ -68,65 +68,23 @@ waveform → analytic signal → Wigner distribution → log compression → Eff
 Implementation:
 `models/bird_wigner_model.py`
 
-## Architecture Overview
-
-### Log-Mel Baseline
-
-The main baseline converts raw waveforms into log-mel spectrograms using `torchaudio` transforms and feeds them into an EfficientNetV2-S CNN backbone.
-
-#### Pipeline
-
-```text
-Waveform
-   ↓
-MelSpectrogram
-   ↓
-AmplitudeToDB
-   ↓
-SpecAugment
-   ↓
-EfficientNetV2-S
-   ↓
-Multilabel classifier
-```
-
-Implemented in:
-
-```text
-models/bird_mel_db_model.py
-```
-
 ---
 
-### Wigner Distribution Variant
+The project uses a centralized `config.yaml` file to control all major
+training and inference parameters, including:
 
-A second model explores the Wigner-Ville distribution as a richer time-frequency representation.
+- model selection,
+- spectrogram generation,
+- augmentation probabilities,
+- optimizer and scheduler parameters,
+- weighted sampling behavior,
+- BCE/Focal loss balancing,
+- checkpoint resume training,
+- ensemble and testing configuration.
 
-#### Pipeline
-
-```text
-Waveform
-   ↓
-Analytic signal (Hilbert transform)
-   ↓
-Wigner distribution
-   ↓
-Log compression
-   ↓
-EfficientNetV2-S
-   ↓
-Multilabel classifier
-```
-
-Implemented in:
-
-```text
-models/bird_wigner_model.py
-```
-
----
-
-The project uses a centralized `config.yaml` file to control model behavior, spectrogram generation, augmentation strategies, and loss balancing. Besides standard training and testing parameters, the configuration system allows rapid experimentation with different time-frequency representations and augmentation policies.
+The configuration system allows rapid experimentation with different
+time-frequency representations and training strategies without modifying
+the core implementation.
 
 ## Mel Configuration
 
